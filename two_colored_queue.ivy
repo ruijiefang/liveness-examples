@@ -3,20 +3,6 @@ include order
 
 instance lclock : unbounded_sequence
 
-module signal0 = {
-    action raise
-
-    specification {
-        relation now
-        after init { now := false; }
-        before raise {
-            now := true;
-            now := false;
-        }
-        invariant ~now
-    }
-}
-
 module isolate split_queue2(nat) with nat = {
     action send(lt:nat,kind:bool)
 
@@ -31,9 +17,11 @@ module isolate split_queue2(nat) with nat = {
         after init {
             begun(X) := false;
             done(X) := false;
+            trying1 := false;
+            trying2 := false;
         }
-        instance trying1 : signal0
-        instance trying2 : signal0
+        var trying1 : bool
+        var trying2 : bool
 
         before send {
             require begun(X) -> X < lt;
@@ -42,7 +30,8 @@ module isolate split_queue2(nat) with nat = {
         }
 
         before recv1 {
-            trying1.raise;
+            trying1 := true;
+            trying1 := false;
             if some x:nat. ~done(x) & begun(x) minimizing x {
                 if queue(x) {
                     done(x) := true;
@@ -51,7 +40,8 @@ module isolate split_queue2(nat) with nat = {
         }
 
         before recv2 {
-            trying2.raise;
+            trying2 := true;
+            trying2 := false;
             if some x:nat. ~done(x) & begun(x) minimizing x {
                 if ~queue(x) {
                     done(x) := true;
@@ -85,6 +75,9 @@ module isolate split_queue2(nat) with nat = {
             }
         }
 
+        invariant ~trying1 
+        invariant ~trying2 
+
         invariant (begun(firstq) & ~done(firstq)) -> forall X. (X<firstq -> ~begun(X) | done(X))
         invariant forall X. (begun(X) & ~done(X)) -> (begun(firstq) & ~done(firstq)) 
     }
@@ -95,8 +88,8 @@ module isolate split_queue2(nat) with nat = {
     invariant ~(X:nat < 0)
     
     explicit temporal property [lemma1]
-    (globally eventually trying1.now) &
-    (globally eventually trying2.now) ->
+    (globally eventually trying1) &
+    (globally eventually trying2) ->
     forall X. (globally begun(X) -> eventually done(X))
     proof {
         tactic skolemizenp
@@ -107,8 +100,8 @@ module isolate split_queue2(nat) with nat = {
             definition work_needed[1](X) = X <= _X & (begun(X) & ~done(X))
             definition work_invar[0] = begun(_X) & ~done(_X)
             definition work_invar[1] = begun(_X) & ~done(_X)
-            definition work_progress[0] = trying1.now
-            definition work_progress[1] = trying2.now 
+            definition work_progress[0] = trying1
+            definition work_progress[1] = trying2 
             definition work_helpful[0] = queue(firstq)
             definition work_helpful[1] = ~queue(firstq) 
         }
