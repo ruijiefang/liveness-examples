@@ -10,6 +10,8 @@ module nq(nat) with nat = {
     var done(X:nat, I: idxseq) : bool
     var done2(X:nat) : bool 
 
+    relation neighbors(I: idxseq, J: idxseq) # for FAU
+
     function trying(I: idxseq) : bool 
 
     var size : idxseq 
@@ -19,6 +21,9 @@ module nq(nat) with nat = {
         trying(X) := false;
         begun(X, I) := false;
         done(X, I) := false;
+        # linear neighbors relation
+        neighbors(I, J) := false;
+        neighbors(I, I+1) := true;
     }
 
 
@@ -50,12 +55,14 @@ module nq(nat) with nat = {
 
     invariant [t] ~trying(I)
 
-    invariant [inv1] begun(X, I + 1) -> done(X, I) # out of FAU because of `+`, :(
-    invariant [inv2] done(X, I) -> begun(X, I + 1) 
+    invariant [inv1] forall I, J. created_neighbors(I, J) -> (begun(X, J) -> done(X, I)) # out of FAU because of `+`, :(
+    invariant [inv2] forall I, J. created_neighbors(I, J) -> (done(X, I) -> begun(X, J)) 
 
     invariant [inv3] done(X, I) -> begun(X, I)
 
     function pending(X, I) = begun(X, I) & ~done(X, I)
+    function created(I) = I < size 
+    function created_neighbors(I, J) = neighbors(I, J) & created(I) & created(J)
 } 
 
 instance m : nq(lclock)
