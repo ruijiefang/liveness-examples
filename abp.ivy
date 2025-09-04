@@ -146,7 +146,7 @@ isolate abp = {
 
         # sender index and receiver index
         individual sender_i:index_t
-        individual sender_gen_i:index_t
+        individual sender_gen_i:index_t # starts with 0 and increments one by one
         individual receiver_i:index_t
 
         # sender and receiver bits, initially 0 (false)
@@ -183,33 +183,42 @@ isolate abp = {
         #
         ################################################################################
 
+        #     action gen_data(v:value)
         before gen_data {
+            # populate sender_gen_i entry of sender's array, and update sender_gen_i.
             require v ~= bot;
             sender_array(sender_gen_i) := v;
             sender_gen_i := index.get_succ(sender_gen_i);
         }
 
+        #    action sender_send_data(m:data_msg_t, a:ack_msg_t)
         before sender_send_data {
             sender_scheduled := true;
             sender_scheduled := false;
 
-            if (sender_array(sender_i) ~= bot) {
+            if (sender_array(sender_i) ~= bot) { # if sender_i is populated by gen_data already
+                # m represents a message ID
                 assume d(m) = sender_array(sender_i);
                 assume dbit(m) <-> sender_bit;
-                call data_msg.send(m);
+                # enter m into queue
+                call data_msg.send(m); 
 
                 data_sent := true;
                 data_sent := false;
             };
         }
 
+        #    action sender_receive_ack(m:data_msg_t, a:ack_msg_t)
         before sender_receive_ack {
             ack_received := true;
             ack_received := false;
 
+            # receive acknowledgement
             a := ack_msg.receive();
+            # if bit matches, then it is a valid ACK, otherwise it is a NACK
             if abit(a) <-> sender_bit {
                 sender_bit := ~sender_bit;
+                # increment sender_i, since current one is ack'ed.
                 sender_i := index.get_succ(sender_i)
             };
         }
@@ -218,7 +227,9 @@ isolate abp = {
             data_received := true;
             data_received := false;
 
+            # receive a particular message ID
             m := data_msg.receive();
+            # if receiver bit matches message bit
             if dbit(m) <-> receiver_bit {
                 # flip receiver bit, append to receiver array
                 receiver_bit := ~receiver_bit;
@@ -247,7 +258,7 @@ isolate abp = {
             call ack_msg.drop(a);
         }
 
-        ################################################################################
+    ################################################################################
 	#
 	# Invariants for proving safety (also help for liveness)
 	#

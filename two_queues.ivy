@@ -54,6 +54,9 @@ module simple_queue(nat) with nat = {
     invariant [inv1] begun2(X) -> done1(X) 
     invariant [inv2] done1(X) -> begun1(X)
     invariant [inv3] done1(X) -> begun2(X) 
+
+    function pending1(X) = begun1(X) & ~done1(X)
+    function pending2(X) = begun2(X) & ~done2(X)
 } 
 
 instance m : simple_queue(lclock)
@@ -76,7 +79,7 @@ isolate proofs = {
                 definition work_helpful[1] = m.begun1(_X) & ~m.done1(_X)
 
                 definition work_created[2](X) = m.begun1(X) | m.begun2(X)
-                definition work_needed[2](X) = X <= _X & ((m.begun1(X) & ~m.done1(X)) | (m.begun2(X) & ~m.done2(X)))
+                definition work_needed[2](X) = X <= _X & (m.pending1(X) | m.pending2(X))
                 definition work_invar[2] = m.begun1(_X) | m.begun2(_X)
                 definition work_progress[2] = m.trying2
                 definition work_helpful[2] = m.begun2(_X) & ~m.done2(_X)
