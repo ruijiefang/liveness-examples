@@ -4,83 +4,76 @@ include order
 instance lclock : unbounded_sequence
 
 module isolate split_queue2(nat) with nat = {
-    action send(lt:nat,kind:bool)
 
-    action recv1
-    action recv2
+    var begun(X:nat) : bool
+    var done(X:nat) : bool
+    var queue(X:nat) : bool
 
-    specification {
-        var begun(X:nat) : bool
-        var done(X:nat) : bool
-        var queue(X:nat) : bool
+    var trying1 : bool
+    var trying2 : bool
 
-        after init {
-            begun(X) := false;
-            done(X) := false;
-            trying1 := false;
-            trying2 := false;
-        }
-        var trying1 : bool
-        var trying2 : bool
-
-        before send {
-            require begun(X) -> X < lt;
-            queue(lt) := kind;
-            begun(lt) := true;
-        }
-
-        before recv1 {
-            trying1 := true;
-            trying1 := false;
-            if some x:nat. ~done(x) & begun(x) minimizing x {
-                if queue(x) {
-                    done(x) := true;
-                }
-            }
-        }
-
-        before recv2 {
-            trying2 := true;
-            trying2 := false;
-            if some x:nat. ~done(x) & begun(x) minimizing x {
-                if ~queue(x) {
-                    done(x) := true;
-                }
-            }
-        }
-
+    after init {
+        begun(X) := false;
+        done(X) := false;
+        trying1 := false;
+        trying2 := false;
     }
 
-    implementation {
-        # prophecy variable telling us the next element to mark as done.
-        var firstq : nat 
+    action send(lt:nat,kind:bool) = {
+        require begun(X) -> X < lt;
+        queue(lt) := kind;
+        begun(lt) := true;
+    }
 
-        after init {
-            firstq := 0;
+    action recv1 = {
+        trying1 := true;
+        trying1 := false;
+        if some x:nat. ~done(x) & begun(x) minimizing x {
+            if queue(x) {
+                done(x) := true;
+            }
         }
+    }
+
+    action recv2 = {
+        trying2 := true;
+        trying2 := false;
+        if some x:nat. ~done(x) & begun(x) minimizing x {
+            if ~queue(x) {
+                done(x) := true;
+            }
+        }
+    }
+
+    # prophecy variable telling us the next element to mark as done.
+    var firstq : nat 
+
+    after init {
+        firstq := 0;
+    }
         
-        implement send {
-            if some y:nat. ~done(y) & begun(y) minimizing y {
-                firstq := y;
-            }
+    after send {
+        if some y:nat. ~done(y) & begun(y) minimizing y {
+            firstq := y;
         }
-        implement recv1 {
-            if some y:nat. ~done(y) & begun(y) minimizing y {
-                firstq := y;
-            }
+    }
+    after recv1 {
+        if some y:nat. ~done(y) & begun(y) minimizing y {
+            firstq := y;
         }
-        implement recv2 {
-            if some y:nat. ~done(y) & begun(y) minimizing y {
-                firstq := y;
-            }
+    }
+    after recv2 {
+        if some y:nat. ~done(y) & begun(y) minimizing y {
+            firstq := y;
         }
+    }
 
         invariant ~trying1 
         invariant ~trying2 
 
         invariant (begun(firstq) & ~done(firstq)) -> forall X. (X<firstq -> ~begun(X) | done(X))
         invariant forall X. (begun(X) & ~done(X)) -> (begun(firstq) & ~done(firstq)) 
-    }
+    
 
 
     invariant begun(X) & done(X) & Y < X & begun(Y) -> done(Y)
