@@ -3,33 +3,23 @@ include order
 
 instance lclock : unbounded_sequence
 
-module signal0 = {
-    action raise
-
-    specification {
-        relation now
-        after init { now := false; }
-        before raise {
-            now := true;
-            now := false;
-        }
-        invariant ~now
-    }
-}
-
 module simple_queue(nat) with nat = {
 
     var begun1(X:nat) : bool 
     var begun2(X:nat) : bool
+    var done1(X:nat) : bool
     var done2(X:nat) : bool 
 
-    instance trying1 : signal0 
-    instance trying2 : signal0 
+    var trying1 : bool 
+    var trying2 : bool  
 
     after init {
         begun1(X) := false;
+        done1(X) := false;
         begun2(X) := false;
         done2(X) := false;
+        trying1 := false;
+        trying2 := false;
     }
 
 
@@ -42,25 +32,28 @@ module simple_queue(nat) with nat = {
     }
 
     action recv1 = {
-        trying1.raise;
-        if some x:nat. ~begun2(x) & begun1(x) minimizing x {
+        trying1 := true;
+        trying1 := false;
+        if some x:nat. begun1(x) & ~done1(x) minimizing x {
+                done1(x) := true;
                 begun2(x) := true;
         }
     }
 
     action recv2 = {
-        trying2.raise;
-        if some x:nat. ~done2(x) & begun2(x) minimizing x {
+        trying2 := true;
+        trying2 := false;
+        if some x:nat. begun2(x) & ~done2(x) minimizing x {
             done2(x) := true;
         }
     }
 
-    invariant [inv1] begun2(X) & done2(X) & Y < X & begun2(Y) -> done2(Y)
-    invariant [inv2] done2(X) -> begun2(X)
-    invariant [inv3] begun2(X) -> begun1(X)
-    invariant [inv4] begun2(X) & begun1(X) & Y < X & begun2(Y) -> begun1(Y)
-    invariant [inv] ~(X:nat < 0)
+    invariant [t1] ~trying1 
+    invariant [t2] ~trying2 
 
+    invariant [inv1] begun2(X) -> done1(X) 
+    invariant [inv2] done1(X) -> begun1(X)
+    invariant [inv3] done1(X) -> begun2(X) 
 } 
 
 instance m : simple_queue(lclock)
@@ -71,16 +64,23 @@ export m.recv2
 
 isolate proofs = {
     explicit temporal property [lemma1]
-        (globally eventually m.trying1.now) ->
-        forall X. (globally m.begun1(X) -> eventually m.begun2(X))
+        ((globally eventually m.trying1) & (globally eventually m.trying2)) ->
+        forall X. (globally m.begun1(X) -> eventually m.done2(X))
         proof {
             tactic skolemizenp
             tactic l2s_auto5 with {
-                definition work_created(X) = m.begun1(X)
-                definition work_needed(X) = X <= _X & (m.begun1(X) & ~m.begun2(X))
-                definition work_invar = m.begun1(_X) & ~m.begun2(_X)
-                definition work_progress = m.trying1.now
-                definition work_helpful = m.begun1(_X)
+                definition work_created[1](X) = m.begun1(X) | m.begun2(X)
+                definition work_needed[1](X) = X <= _X & m.begun1(X) & ~m.done1(X)
+                definition work_invar[1] = m.begun1(_X) | m.begun2(_X)
+                definition work_progress[1] = m.trying1
+                definition work_helpful[1] = m.begun1(_X) & ~m.done1(_X)
+
+                definition work_created[2](X) = m.begun1(X) | m.begun2(X)
+                definition work_needed[2](X) = X <= _X & ((m.begun1(X) & ~m.done1(X)) | (m.begun2(X) & ~m.done2(X)))
+                definition work_invar[2] = m.begun1(_X) | m.begun2(_X)
+                definition work_progress[2] = m.trying2
+                definition work_helpful[2] = m.begun2(_X) & ~m.done2(_X)
+
             }
         }
 
