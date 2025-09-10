@@ -1,0 +1,152 @@
+#lang ivy1.8
+
+# Toy exampe modeling a strongly fair channel
+
+# These three variables are used to indicate when certain actions occur, so we
+# can write liveness properties.
+
+var trying: bool
+var sending : bool
+var receiving : bool
+
+# This is our olnly state bit. It indicates that a message has been received.
+
+var received : bool
+
+after init {
+    trying := false;
+    sending := false;
+    receiving := false;
+    received := false;
+}
+
+# This action represents the sender. If the message has not already been received,
+# it sends the message. Sending is mdeled by raising the signal 'sending'.
+
+export action try_send = {
+    trying := true;
+    trying := false;
+    if ~received {
+        sending := true;
+        sending := false;
+    }
+}
+
+# When we receive, we raise the receiving flag and set received to
+# true, so the sender knows to stop sending (this abstracts an ack
+# path). We don't bother to say that receive can only occur after send,
+# since this fact only affects safety, not liveness.
+
+export action receive = {
+    receiving := true;
+    receiving := false;
+    received := true;
+}
+
+# This signals are invariantly false at the 'big step' level.
+
+invariant ~trying
+invariant ~sending
+invariant ~receiving
+
+# Strong fairness assumption: if we send infinitely often, we receive infinitely often.
+
+explicit temporal axiom [strongfair] (globally eventually sending) -> (globally eventually receiving)
+
+# Safety property: if the sender infinitely often calls try_send, the message is
+# eventially received. We write 'eventually received' in a funny way: 
+#
+# globally ~received -> eventually received
+#
+# This is because the ranking tactic expects a formula in this form.
+#
+
+temporal property [live] (globally eventually trying) -> (globally ~received -> eventually received)
+
+# The proof involves three 'infinitely often' conditions:
+#
+# - infinitely often trying
+# - infinitely often receiving
+# - infinitely often ~(eventually sending)
+#
+# The last of these derives from the condition (globally eventually sending) in the
+# strong fairness assumption. That is, if this condition is false, we know that
+# eventually (~eventually sending) (i.e., at some point in the future there is no more
+# sending). Ivy uses the symbolic tableau construction to eliminate the temporal operators.
+# This means that (eventually sending) can be thought of as a Boolean variable that satisfies
+# certain constraints.
+#
+# We split the proof into three cases, based on which infinitely often
+# condition will eventually reduce the ranking. 
+
+proof {
+    instantiate strongfair
+    tactic ranking with {
+
+        # Suppose we are in the case where we don't infinitely often
+        # send but the last sending event hasn't occurred yet. That's
+        # what the helpful condition says here. In this case, we know
+        # by the tableau constraints that eventually (~eventually
+        # sending). That is, (eventually sending) must eveutually go
+        # from true to false.  So we make this predicate a ranking,
+        # and show that it must eventually be reduced. This says that
+        # if we send finitely often, then we eventually have to get
+        # into state from which we never send again. Notice that the
+        # helpful condition remains true until the ranking is reduced,
+        # a requirement of the rule.
+
+        definition work_created[0] = true
+        definition work_needed[0] = eventually sending
+        definition work_invar[0] = ~(eventually received)
+        definition work_progress[0] = ~(eventually sending)
+        definition work_helpful[0] = ~(globally eventually sending) & (eventually sending)
+
+        # Now, suppose we have reached a state where the above ranking is false,
+        # that is, we never again send. By assumption, we must in the future try sending
+        # and fail to send, whcih in turn means that when we try, received must be
+        # true. This contradicts our invariant that ~(eventually received). That is,
+        # according to the tableau constraints ~(eventually received) implies
+        # ~received, which is a contradiction. In the case where the infinite often
+        # condition implies a contraction, 'true' is a ranking, since 'false' implies
+        # that true is false (and anything else you like!). The helpful condition
+        # here tells use that ths ranking handles the case where we never again send.
+        # Notice that this condition is persistent, as implied by the tableau constraints.
+
+        definition work_created[1] = true
+        definition work_needed[1] = true
+        definition work_invar[1] = ~(eventually received)
+        definition work_progress[1] = trying
+        definition work_helpful[1] = ~(eventually sending)
+
+        # Finally, we handle the case where we infinitely often send. This implies by
+        # the strong fairness assumption that we infinitely often receive. which 
+        # contradicts the invariant ~(eventually reveived). Again, because of the contradiciton,
+        # the ranking is 'true'. 
+
+        definition work_created[2] = true
+        definition work_needed[2] = true
+        definition work_invar[2] = ~(eventually received)
+        definition work_progress[2] = receiving
+        definition work_helpful[2] = (globally eventually sending)
+
+        # The correctness of the invariant above is als ensured by the tableau constraints.
+        # The invariant ~(eventually received) is established because it is the negation
+        # of the eventually we want to prove. It is preserved because ~(eventually p)
+        # implies itself at the next time by the tableau constraints. 
+
+        # Finally, we need to know that the strong fariness condition is invariant to
+        # that ranking [2] is reduced. It is inductive by the tableau constraints. 
+
+        invariant (globally eventually sending) -> (globally eventually receiving)
+
+        # Also, notice that, for each ranking, we must show that the
+        # helpful condition implies (eventually r) where r is the
+        # progress condition. These facts are also implied by the
+        # tableau constraints. In the simplest progress rule, (globally
+        # eventually r) is a premise. But in general we nly require
+        # that (eventually r) is implied by the helpful condition. So in
+        # general, we need (eventually r) as a state variable, since it can
+        # be true in some states and false in others.
+
+    }
+}
