@@ -55,7 +55,7 @@ module nq(nat) with nat = {
 
     invariant [t] ~trying(I)
 
-    invariant [inv1] forall I, J. created_neighbors(I, J) -> (begun(X, J) -> done(X, I)) # out of FAU because of `+`, :(
+    invariant [inv1] forall I, J. created_neighbors(I, J) -> (begun(X, J) -> done(X, I))
     invariant [inv2] forall I, J. created_neighbors(I, J) -> (done(X, I) -> begun(X, J)) 
 
     invariant [inv3] done(X, I) -> begun(X, I)

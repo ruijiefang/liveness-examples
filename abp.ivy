@@ -130,6 +130,11 @@ isolate abp = {
     instantiate ack_msg : fifo_channel(ack_msg_t)
     relation abit(A:ack_msg_t)  # immutable
 
+    # manual encoding to eliminate weak fairness assumptions 
+    # p = data_sent 
+    # q = data_received
+    var eventually_data_sent : bool 
+
     action gen_data(v:value)
     action sender_send_data(m:data_msg_t, a:ack_msg_t)
     action sender_receive_ack(m:data_msg_t, a:ack_msg_t)
@@ -175,6 +180,7 @@ isolate abp = {
             data_received := false;
             ack_sent := false;
             ack_received := false;
+            eventually_data_sent = true;
         }
 
         ################################################################################
@@ -196,7 +202,8 @@ isolate abp = {
             sender_scheduled := true;
             sender_scheduled := false;
 
-            if (sender_array(sender_i) ~= bot) { # if sender_i is populated by gen_data already
+
+            if (sender_array(sender_i) ~= bot & eventually_data_sent) { # if sender_i is populated by gen_data already
                 # m represents a message ID
                 assume d(m) = sender_array(sender_i);
                 assume dbit(m) <-> sender_bit;
@@ -205,7 +212,12 @@ isolate abp = {
 
                 data_sent := true;
                 data_sent := false;
-            };
+
+                # data_sent gets toggled, non-deterministically transition into a dead state
+                if * {
+                    eventually_data_sent := false;
+                }
+            } 
         }
 
         #    action sender_receive_ack(m:data_msg_t, a:ack_msg_t)
@@ -325,6 +337,19 @@ isolate abp = {
         #
         ################################################################################
     }
+
+    explicit temporal property [liveness] 
+            # temporal property
+            (
+                (globally eventually sender_scheduled) &                                   # scheduling fairness
+                (globally eventually receiver_scheduled) &                                 # scheduling fairness
+                ((globally eventually data_sent) -> (globally eventually data_received)) & # data channel fairness
+                ((globally eventually ack_sent) -> (globally eventually ack_received))     # ack channel fairness
+            ) -> (forall I. globally (sender_array(I) ~= bot -> eventually (receiver_array(I) ~= bot)))
+    proof {
+           tactic sorry
+    }
+
 }
 
 export abp.gen_data
@@ -334,3 +359,4 @@ export abp.receiver_receive_data
 export abp.receiver_send_ack
 export abp.data_msg_drop
 export abp.ack_msg_drop
+
