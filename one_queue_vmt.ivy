@@ -1,0 +1,62 @@
+#lang ivy1.8
+include order
+
+instance lclock : unbounded_sequence
+
+module simple_queue(nat) with nat = {
+
+    var begun(X:nat) : bool 
+    var done(X:nat) : bool 
+    var trying : bool  
+
+    after init {
+        begun(X) := false;
+        done(X) := false;
+        trying := false;
+    }
+
+
+    action send(lt:nat) = {
+        begun(lt) := true;
+    }
+
+    before send(lt:nat) {
+        require begun(X) -> X < lt;
+    }
+
+    action recv = {
+        trying := true;
+        trying := false;
+        if some x:nat. ~done(x) & begun(x) minimizing x {
+                done(x) := true;
+        }
+    }
+
+    invariant [inv1] begun(X) & done(X) & Y < X & begun(Y) -> done(Y)
+    invariant [inv2] done(X) -> begun(X)
+    invariant [inv3] ~(X:nat < 0)
+    invariant [t] ~trying 
+} 
+
+instance m : simple_queue(lclock)
+
+export m.send
+export m.recv
+
+isolate proofs = {
+    explicit temporal property [lemma1]
+        (globally eventually m.trying) ->
+        forall X. (globally m.begun(X) -> eventually m.done(X))
+        proof {
+            tactic skolemizenp
+            tactic ranking_infer with {
+                definition work_created(X) = m.begun(X)
+                definition work_needed(X) = X <= _X & (m.begun(X) & ~m.done(X))
+                definition work_invar = m.begun(_X) & ~m.done(_X)
+                definition work_progress = m.trying
+                definition work_helpful = true 
+            }
+        }
+
+} with this 
+
